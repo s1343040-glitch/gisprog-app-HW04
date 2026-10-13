@@ -41,7 +41,7 @@ def 行政區各時段摘要(資料, 行政區名稱, 門檻值):
 @solara.component
 def Page():
     solara.Title("YouBike 空站觀察")
-    solara.Markdown("# 臺北 YouBike 行政區各時段狀況")
+    solara.Markdown("# 臺北 YouBike 各行政區各時段空站比例與車輛數")
 
     with solara.Column(style={"max-width": "480px"}):
         solara.Select(label="選擇行政區", value=行政區, values=行政區們)
@@ -51,13 +51,20 @@ def Page():
 
     圖 = px.bar(
         表,
-        x="時段",
-        y="空站比例",
+        x="空站比例",
+        y="時段",
+        orientation="h",
         title=f"{行政區.value}各時段空站比例（可借車 ≤ {門檻.value} 算空站）",
         labels={"時段": "時段", "空站比例": "空站比例"},
         hover_data=["總站數", "可借車總數", "可還車總數"],
     )
-    圖.update_layout(yaxis_tickformat=".0%")
+    圖.update_layout(
+        xaxis_tickformat=".0%",
+        yaxis={
+            "categoryorder": "array",
+            "categoryarray": list(reversed(表["時段"].tolist())),
+        },
+    )
     solara.FigurePlotly(圖)
 
     solara.DataFrame(表)
@@ -65,5 +72,5 @@ def Page():
     solara.Markdown(
         "資料來源：臺北市 YouBike 2.0 即時資料（臺北市資料大平臺），"
         "依政府資料開放授權條款第 1 版使用。"
-        f"資料時間（快照）：{'、'.join(資料時間們)}。"
     )
+    solara.Markdown(f"資料時間（快照）：{'、'.join(資料時間們)}。")

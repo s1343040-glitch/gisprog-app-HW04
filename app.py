@@ -9,7 +9,7 @@ import pandas as pd
 import plotly.express as px
 import solara
 
-DATA_PATH = Path(__file__).parent / "data" / "youbike_sample.csv"
+DATA_PATH = Path(__file__).parent / "data" / "w3_youbike_long.csv"
 
 # 讀檔放在元件外面：App 啟動時只讀一次，切換選項時不會重新讀檔。
 # sno、act 指定為字串，避免被自動轉成整數（W3 的 read_json 陷阱，read_csv 也一樣）。

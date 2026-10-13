@@ -16,48 +16,48 @@ DATA_PATH = Path(__file__).parent / "data" / "w3_youbike_long.csv"
 df = pd.read_csv(DATA_PATH, dtype={"sno": str, "act": str})
 df = df[df["act"] == "1"]  # 只看營運中的站
 
-時段們 = sorted(df["時段"].unique())
+行政區們 = sorted(df["sarea"].unique())
+資料時間們 = sorted(df["snapshot_time"].unique())
 
 # reactive：值改變時，用到它的元件會自動重新執行。
 門檻 = solara.reactive(0)
-時段 = solara.reactive(時段們[0])
+行政區 = solara.reactive(行政區們[0])
 
 
-def 各區空站比例(資料, 門檻值):
-    """計算各區的站數、空站數與空站比例（可借車 <= 門檻值 算空站）。"""
-    資料 = 資料.assign(空站=資料["available_rent_bikes"] <= 門檻值)
-    表 = 資料.groupby("sarea").agg(站數=("sno", "size"), 空站數=("空站", "sum"))
-    表["空站比例"] = (表["空站數"] / 表["站數"]).round(3)
-    return 表.sort_values("空站比例", ascending=False).reset_index()
+def 行政區各時段摘要(資料, 行政區名稱, 門檻值):
+    """計算指定行政區各時段的站數、空站比例與車輛總數。"""
+    資料 = 資料[資料["sarea"] == 行政區名稱].copy()
+    資料["空站"] = 資料["available_rent_bikes"] <= 門檻值
+    表 = 資料.groupby("時段").agg(
+        總站數=("sno", "nunique"),
+        空站數=("空站", "sum"),
+        可借車總數=("available_rent_bikes", "sum"),
+        可還車總數=("available_return_bikes", "sum"),
+    )
+    表["空站比例"] = (表["空站數"] / 表["總站數"]).round(3)
+    return 表.reset_index()[["時段", "總站數", "空站比例", "可借車總數", "可還車總數"]]
 
 
 @solara.component
 def Page():
     solara.Title("YouBike 空站觀察")
-    solara.Markdown("# 臺北 YouBike 各區空站比例")
+    solara.Markdown("# 臺北 YouBike 行政區各時段狀況")
 
-    # 滑桿預設會撐滿整個頁寬，用 Column 限制最大寬度，比較好操作。
     with solara.Column(style={"max-width": "480px"}):
+        solara.Select(label="選擇行政區", value=行政區, values=行政區們)
         solara.SliderInt("空站門檻：可借車 ≤", value=門檻, min=0, max=5)
-    solara.ToggleButtonsSingle(value=時段, values=時段們)
 
-    當時 = df[df["時段"] == 時段.value]
-    表 = 各區空站比例(當時, 門檻.value)
+    表 = 行政區各時段摘要(df, 行政區.value, 門檻.value)
 
     圖 = px.bar(
         表,
-        x="空站比例",
-        y="sarea",
-        orientation="h",
-        title=f"{時段.value}，可借車 ≤ {門檻.value} 算空站（只算營運中的站）",
-        labels={"sarea": "", "空站比例": "空站比例"},
+        x="時段",
+        y="空站比例",
+        title=f"{行政區.value}各時段空站比例（可借車 ≤ {門檻.value} 算空站）",
+        labels={"時段": "時段", "空站比例": "空站比例"},
+        hover_data=["總站數", "可借車總數", "可還車總數"],
     )
-    # 每區給 30 px 高度，行政區名稱才不會被 Plotly 自動隔行省略；換成區數更多的縣市也適用。
-    圖.update_layout(
-        yaxis={"categoryorder": "total ascending"},
-        xaxis_tickformat=".0%",
-        height=150 + 30 * len(表),
-    )
+    圖.update_layout(yaxis_tickformat=".0%")
     solara.FigurePlotly(圖)
 
     solara.DataFrame(表)
@@ -65,5 +65,5 @@ def Page():
     solara.Markdown(
         "資料來源：臺北市 YouBike 2.0 即時資料（臺北市資料大平臺），"
         "依政府資料開放授權條款第 1 版使用。"
-        f"資料時間：{時段.value}。"
+        f"資料時間（快照）：{'、'.join(資料時間們)}。"
     )

@@ -111,6 +111,25 @@ def Page():
     with solara.Column(style={"max-width": "480px"}):
         solara.Select(label="選擇行政區", value=行政區, values=行政區們)
     表 = 行政區各時段摘要(df, 行政區.value, 門檻.value)
+
+    行政區圖 = px.bar(
+        表,
+        x="空站比例",
+        y="時段",
+        orientation="h",
+        title=f"{行政區.value}各時段空站比例（可借車 ≤ {門檻.value} 算空站）",
+        labels={"時段": "時段", "空站比例": "空站比例"},
+        hover_data=["總站數", "空站數", "可借車總數", "可還車總數"],
+    )
+    行政區圖.update_layout(
+        xaxis_tickformat=".0%",
+        yaxis={
+            "categoryorder": "array",
+            "categoryarray": list(reversed(表["時段"].tolist())),
+        },
+    )
+    solara.FigurePlotly(行政區圖)
+
     solara.DataFrame(表)
 
     solara.Markdown(f"## {行政區.value}空站站點明細")

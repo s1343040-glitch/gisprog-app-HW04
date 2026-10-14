@@ -23,7 +23,7 @@ df = df[df["act"] == "1"]  # 只看營運中的站
 # reactive：值改變時，用到它的元件會自動重新執行。
 門檻 = solara.reactive(0)
 行政區 = solara.reactive(行政區們[0])
-明細時段 = solara.reactive(時段們[0])
+時段 = solara.reactive(時段們[0])
 
 
 def 行政區各時段摘要(資料, 行政區名稱, 門檻值):
@@ -39,6 +39,22 @@ def 行政區各時段摘要(資料, 行政區名稱, 門檻值):
     表["空站比例"] = (表["空站數"] / 表["總站數"]).round(3)
     return 表.reset_index()[
         ["時段", "總站數", "空站數", "空站比例", "可借車總數", "可還車總數"]
+    ]
+
+
+def 各區指定時段摘要(資料, 時段值, 門檻值):
+    """計算指定時段各行政區的空站比例與車輛數。"""
+    資料 = 資料[資料["時段"] == 時段值].copy()
+    資料["空站"] = 資料["available_rent_bikes"] <= 門檻值
+    表 = 資料.groupby("sarea").agg(
+        總站數=("sno", "nunique"),
+        空站數=("空站", "sum"),
+        可借車總數=("available_rent_bikes", "sum"),
+        可還車總數=("available_return_bikes", "sum"),
+    )
+    表["空站比例"] = (表["空站數"] / 表["總站數"]).round(3)
+    return 表.sort_values("空站比例").reset_index()[
+        ["sarea", "總站數", "空站數", "空站比例", "可借車總數", "可還車總數"]
     ]
 
 
@@ -69,38 +85,39 @@ def Page():
     solara.Markdown("# 臺北 YouBike 各行政區各時段空站比例與車輛數")
 
     with solara.Column(style={"max-width": "480px"}):
-        solara.Select(label="選擇行政區", value=行政區, values=行政區們)
         solara.SliderInt("空站門檻：可借車 ≤", value=門檻, min=0, max=5)
+    solara.ToggleButtonsSingle(value=時段, values=時段們)
 
-    表 = 行政區各時段摘要(df, 行政區.value, 門檻.value)
+    各區表 = 各區指定時段摘要(df, 時段.value, 門檻.value)
 
     圖 = px.bar(
-        表,
+        各區表,
         x="空站比例",
-        y="時段",
+        y="sarea",
         orientation="h",
-        title=f"{行政區.value}各時段空站比例（可借車 ≤ {門檻.value} 算空站）",
-        labels={"時段": "時段", "空站比例": "空站比例"},
+        title=f"{時段.value}各行政區空站比例（可借車 ≤ {門檻.value} 算空站）",
+        labels={"sarea": "行政區", "空站比例": "空站比例"},
         hover_data=["總站數", "空站數", "可借車總數", "可還車總數"],
     )
     圖.update_layout(
         xaxis_tickformat=".0%",
-        yaxis={
-            "categoryorder": "array",
-            "categoryarray": list(reversed(表["時段"].tolist())),
-        },
+        yaxis={"categoryorder": "total ascending"},
     )
     solara.FigurePlotly(圖)
 
+    solara.DataFrame(各區表)
+
+    solara.Markdown("## 選擇行政區查看詳細資料")
+    with solara.Column(style={"max-width": "480px"}):
+        solara.Select(label="選擇行政區", value=行政區, values=行政區們)
+    表 = 行政區各時段摘要(df, 行政區.value, 門檻.value)
     solara.DataFrame(表)
 
     solara.Markdown(f"## {行政區.value}空站站點明細")
-    solara.Markdown("選擇要查看站點明細的時段：")
-    solara.ToggleButtonsSingle(value=明細時段, values=時段們)
     solara.Markdown(
-        f"以下列出 {明細時段.value} 可借車數 ≤ {門檻.value} 的營運中站點。"
+        f"以下列出 {時段.value} 可借車數 ≤ {門檻.value} 的營運中站點。"
     )
-    明細 = 行政區空站明細(df, 行政區.value, 明細時段.value, 門檻.value)
+    明細 = 行政區空站明細(df, 行政區.value, 時段.value, 門檻.value)
     if 明細.empty:
         solara.Markdown("目前門檻下沒有符合條件的空站。")
     else:

@@ -181,13 +181,63 @@ def Page():
     solara.Title("YouBike 空站觀察")
     solara.Markdown("# 臺北 YouBike 各行政區各時段空站比例與車輛數")
 
-    with solara.ColumnsResponsive(12, medium=4):
+    with solara.ColumnsResponsive(12, medium=6):
         with solara.Column():
             solara.SliderInt("空站門檻：可借車 ≤", value=門檻, min=0, max=5)
         with solara.Column():
             solara.Select(label="選擇行政區", value=行政區, values=行政區們)
+    solara.ToggleButtonsSingle(value=時段, values=時段們)
+
+    站點 = 指定行政區時段站點(df, 行政區.value, 時段.value)
+    地圖, 無座標站數 = 建立站點地圖(站點)
+    solara.Markdown(f"## {行政區.value}・{時段.value}站點分布")
+    with solara.ColumnsResponsive(12, medium=6):
         with solara.Column():
-            solara.Select(label="選擇時段", value=時段, values=時段們)
+            if 地圖 is None:
+                solara.Markdown("目前選擇的時段沒有可繪製座標的站點。")
+            else:
+                solara.display(地圖)
+                if 無座標站數:
+                    solara.Markdown(
+                        f"有 {無座標站數} 個站點因缺少座標，未顯示於地圖。"
+                    )
+            solara.Markdown(
+                "地圖底圖來源：[OpenStreetMap 貢獻者]"
+                "(https://www.openstreetmap.org/copyright)。"
+            )
+        with solara.Column():
+            站點級距表 = (
+                站點["可借車級距"]
+                .value_counts()
+                .reindex(
+                    級距順序
+                    + (["無資料"] if "無資料" in 站點["可借車級距"].values else []),
+                    fill_value=0,
+                )
+                .rename_axis("可借車數級距")
+                .reset_index(name="站點數")
+            )
+            站點圖 = px.bar(
+                站點級距表,
+                x="可借車數級距",
+                y="站點數",
+                color="可借車數級距",
+                category_orders={
+                    "可借車數級距": 站點級距表["可借車數級距"].tolist()
+                },
+                color_discrete_map=級距顏色,
+                title=f"{行政區.value}・{時段.value}各級距站點數",
+                labels={"可借車數級距": "可借車數", "站點數": "站點數"},
+            )
+            站點圖.update_layout(
+                showlegend=False,
+                xaxis={
+                    "categoryorder": "array",
+                    "categoryarray": 站點級距表["可借車數級距"].tolist(),
+                },
+                margin={"l": 20, "r": 20, "t": 60, "b": 20},
+            )
+            solara.FigurePlotly(站點圖)
 
     各區表 = 各區指定時段摘要(df, 時段.value, 門檻.value)
     各區顯示表 = 各區表.assign(
@@ -253,57 +303,6 @@ def Page():
             solara.Markdown(f"## {行政區.value}各時段摘要")
             solara.FigurePlotly(行政區圖)
             solara.DataFrame(行政區顯示表)
-
-    站點 = 指定行政區時段站點(df, 行政區.value, 時段.value)
-    地圖, 無座標站數 = 建立站點地圖(站點)
-    solara.Markdown(f"## {行政區.value}・{時段.value}站點分布")
-    with solara.ColumnsResponsive(12, medium=6):
-        with solara.Column():
-            if 地圖 is None:
-                solara.Markdown("目前選擇的時段沒有可繪製座標的站點。")
-            else:
-                solara.display(地圖)
-                if 無座標站數:
-                    solara.Markdown(
-                        f"有 {無座標站數} 個站點因缺少座標，未顯示於地圖。"
-                    )
-            solara.Markdown(
-                "地圖底圖來源：[OpenStreetMap 貢獻者]"
-                "(https://www.openstreetmap.org/copyright)。"
-            )
-        with solara.Column():
-            站點級距表 = (
-                站點["可借車級距"]
-                .value_counts()
-                .reindex(
-                    級距順序
-                    + (["無資料"] if "無資料" in 站點["可借車級距"].values else []),
-                    fill_value=0,
-                )
-                .rename_axis("可借車數級距")
-                .reset_index(name="站點數")
-            )
-            站點圖 = px.bar(
-                站點級距表,
-                x="可借車數級距",
-                y="站點數",
-                color="可借車數級距",
-                category_orders={
-                    "可借車數級距": 站點級距表["可借車數級距"].tolist()
-                },
-                color_discrete_map=級距顏色,
-                title=f"{行政區.value}・{時段.value}各級距站點數",
-                labels={"可借車數級距": "可借車數", "站點數": "站點數"},
-            )
-            站點圖.update_layout(
-                showlegend=False,
-                xaxis={
-                    "categoryorder": "array",
-                    "categoryarray": 站點級距表["可借車數級距"].tolist(),
-                },
-                margin={"l": 20, "r": 20, "t": 60, "b": 20},
-            )
-            solara.FigurePlotly(站點圖)
 
     solara.Markdown("### 目前選定時段的營運站點")
     站點明細 = 站點[["sna", "available_rent_bikes"]].rename(

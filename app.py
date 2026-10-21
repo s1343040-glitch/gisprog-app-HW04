@@ -81,6 +81,8 @@ def 建立站點地圖(站點):
         width="100%",
         basemap="OpenStreetMap",
     )
+    地圖.layout.min_width = "0"
+    地圖.layout.max_width = "100%"
     緯度界線 = [有座標站點["latitude"].min(), 有座標站點["latitude"].max()]
     經度界線 = [有座標站點["longitude"].min(), 有座標站點["longitude"].max()]
     if len(有座標站點) > 1 and (
@@ -234,13 +236,28 @@ def Page():
         .responsive-page .v-row,
         .responsive-page .v-col,
         .responsive-page .plotly-graph-div,
-        .responsive-page .js-plotly-plot {
+        .responsive-page .js-plotly-plot,
+        .responsive-page .plot-container,
+        .responsive-page .svg-container,
+        .responsive-page .responsive-visual {
             max-width: 100%;
             min-width: 0;
         }
         .responsive-page .plotly-graph-div,
-        .responsive-page .js-plotly-plot {
+        .responsive-page .js-plotly-plot,
+        .responsive-page .plot-container,
+        .responsive-page .svg-container,
+        .responsive-page .leaflet-container {
             width: 100% !important;
+        }
+        .responsive-page .responsive-visual {
+            width: 100%;
+            overflow: hidden;
+        }
+        .responsive-page .responsive-visual > .v-row,
+        .responsive-page .responsive-visual > .v-col {
+            min-width: 0;
+            max-width: 100%;
         }
         .responsive-page {
             overflow-wrap: anywhere;
@@ -300,6 +317,10 @@ def Page():
             .responsive-page .leaflet-container {
                 max-width: 100%;
             }
+            .responsive-page .responsive-visual {
+                margin-left: 0;
+                margin-right: 0;
+            }
         }
         """
     )
@@ -321,7 +342,7 @@ def Page():
         地圖, 無座標站數 = 建立站點地圖(站點)
         solara.Markdown(f"## {行政區.value}・{時段.value}站點分布")
         with solara.ColumnsResponsive(12, medium=6):
-            with solara.Column():
+            with solara.Column(classes=["responsive-visual"]):
                 if 地圖 is None:
                     solara.Markdown("目前選擇的時段沒有可繪製座標的站點。")
                 else:
@@ -334,7 +355,7 @@ def Page():
                     "地圖底圖來源：[OpenStreetMap 貢獻者]"
                     "(https://www.openstreetmap.org/copyright)。"
                 )
-            with solara.Column():
+            with solara.Column(classes=["responsive-visual"]):
                 站點級距表 = (
                     站點["可借車級距"]
                     .value_counts()
@@ -370,6 +391,7 @@ def Page():
                     },
                     margin={"l": 20, "r": 20, "t": 60, "b": 20},
                     autosize=True,
+                    width=None,
                 )
                 solara.FigurePlotly(站點圖)
 
@@ -398,6 +420,7 @@ def Page():
             xaxis_tickformat=".0%",
             yaxis={"categoryorder": "total ascending"},
             autosize=True,
+            width=None,
         )
         表 = 行政區各時段摘要(df, 行政區.value, 門檻.value)
         行政區顯示表 = 表.assign(
@@ -430,12 +453,13 @@ def Page():
                 "categoryarray": list(reversed(表["時段"].tolist())),
             },
             autosize=True,
+            width=None,
         )
         with solara.ColumnsResponsive(12, medium=6):
-            with solara.Column():
+            with solara.Column(classes=["responsive-visual"]):
                 solara.FigurePlotly(圖)
                 響應式資料呈現(各區顯示表)
-            with solara.Column():
+            with solara.Column(classes=["responsive-visual"]):
                 solara.Markdown(f"## {行政區.value}各時段摘要")
                 solara.FigurePlotly(行政區圖)
                 響應式資料呈現(行政區顯示表)

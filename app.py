@@ -179,154 +179,293 @@ def 行政區空站明細(資料, 行政區名稱, 時段值, 門檻值):
     return 明細.sort_values(["時段", "可借車數", "站名"]).reset_index(drop=True)
 
 
+def 建立直向資料卡片(資料):
+    """將資料表的每一列轉成可在窄版閱讀的直向資訊卡。"""
+    卡片們 = []
+    for _, 列 in 資料.iterrows():
+        欄位內容 = []
+        for 欄位, 值 in 列.items():
+            if pd.isna(值):
+                顯示值 = "—"
+            elif 欄位 == "空站比例":
+                顯示值 = f"{float(值):.1%}"
+            else:
+                顯示值 = str(值)
+            欄位內容.append(
+                '<div class="responsive-card-field">'
+                f'<span class="responsive-card-label">{html.escape(str(欄位))}</span>'
+                f'<span class="responsive-card-value">{html.escape(顯示值)}</span>'
+                "</div>"
+            )
+        卡片們.append(
+            '<article class="responsive-card">'
+            + "".join(欄位內容)
+            + "</article>"
+        )
+
+    if not 卡片們:
+        return '<p class="responsive-empty">目前沒有資料。</p>'
+    return '<div class="responsive-card-list">' + "".join(卡片們) + "</div>"
+
+
+@solara.component
+def 響應式資料呈現(資料):
+    with solara.Column(classes=["responsive-table-desktop"]):
+        solara.DataFrame(資料)
+    with solara.Column(classes=["responsive-record-cards"]):
+        solara.HTML(tag="div", unsafe_innerHTML=建立直向資料卡片(資料))
+
+
 @solara.component
 def Page():
     solara.Title("YouBike 空站觀察")
-    solara.Markdown("# 臺北 YouBike 各行政區各時段空站比例與車輛數")
+    solara.Style(
+        """
+        .responsive-page,
+        .responsive-page * {
+            box-sizing: border-box;
+        }
+        .responsive-page {
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            overflow-x: clip;
+        }
+        .responsive-page .v-row,
+        .responsive-page .v-col,
+        .responsive-page .plotly-graph-div,
+        .responsive-page .js-plotly-plot {
+            max-width: 100%;
+            min-width: 0;
+        }
+        .responsive-page .plotly-graph-div,
+        .responsive-page .js-plotly-plot {
+            width: 100% !important;
+        }
+        .responsive-page {
+            overflow-wrap: anywhere;
+        }
+        .responsive-page .responsive-time-selector {
+            display: flex;
+            flex-wrap: wrap;
+            width: 100%;
+            max-width: 100%;
+        }
+        .responsive-page .responsive-time-selector .v-btn {
+            min-width: 0;
+            white-space: normal;
+        }
+        .responsive-page .responsive-record-cards {
+            display: none !important;
+        }
+        .responsive-card-list {
+            display: grid;
+            gap: 12px;
+            width: 100%;
+            min-width: 0;
+        }
+        .responsive-card {
+            min-width: 0;
+            padding: 12px;
+            border: 1px solid #d7dce2;
+            border-radius: 8px;
+            background: #ffffff;
+        }
+        .responsive-card-field {
+            display: grid;
+            grid-template-columns: minmax(6.5em, 36%) minmax(0, 1fr);
+            gap: 8px;
+            padding: 4px 0;
+        }
+        .responsive-card-label {
+            font-weight: 600;
+        }
+        .responsive-card-label,
+        .responsive-card-value {
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+        .responsive-empty {
+            margin: 0;
+        }
+        @media (max-width: 959px) {
+            .responsive-page .responsive-table-desktop {
+                display: none !important;
+            }
+            .responsive-page .responsive-record-cards {
+                display: block !important;
+                width: 100%;
+                min-width: 0;
+            }
+            .responsive-page .leaflet-container {
+                max-width: 100%;
+            }
+        }
+        """
+    )
+    with solara.Column(classes=["responsive-page"]):
+        solara.Markdown("# 臺北 YouBike 各行政區各時段空站比例與車輛數")
 
-    with solara.ColumnsResponsive(12, medium=6):
-        with solara.Column():
-            solara.SliderInt("空站門檻：可借車 ≤", value=門檻, min=0, max=5)
-        with solara.Column():
-            solara.Select(label="選擇行政區", value=行政區, values=行政區們)
-    solara.ToggleButtonsSingle(value=時段, values=時段們)
+        with solara.ColumnsResponsive(12, medium=6):
+            with solara.Column():
+                solara.SliderInt("空站門檻：可借車 ≤", value=門檻, min=0, max=5)
+            with solara.Column():
+                solara.Select(label="選擇行政區", value=行政區, values=行政區們)
+        solara.ToggleButtonsSingle(
+            value=時段,
+            values=時段們,
+            classes=["responsive-time-selector"],
+        )
 
-    站點 = 指定行政區時段站點(df, 行政區.value, 時段.value)
-    地圖, 無座標站數 = 建立站點地圖(站點)
-    solara.Markdown(f"## {行政區.value}・{時段.value}站點分布")
-    with solara.ColumnsResponsive(12, medium=6):
-        with solara.Column():
-            if 地圖 is None:
-                solara.Markdown("目前選擇的時段沒有可繪製座標的站點。")
-            else:
-                solara.display(地圖)
-                if 無座標站數:
-                    solara.Markdown(
-                        f"有 {無座標站數} 個站點因缺少座標，未顯示於地圖。"
-                    )
-            solara.Markdown(
-                "地圖底圖來源：[OpenStreetMap 貢獻者]"
-                "(https://www.openstreetmap.org/copyright)。"
-            )
-        with solara.Column():
-            站點級距表 = (
-                站點["可借車級距"]
-                .value_counts()
-                .reindex(
-                    級距順序
-                    + (["無資料"] if "無資料" in 站點["可借車級距"].values else []),
-                    fill_value=0,
+        站點 = 指定行政區時段站點(df, 行政區.value, 時段.value)
+        地圖, 無座標站數 = 建立站點地圖(站點)
+        solara.Markdown(f"## {行政區.value}・{時段.value}站點分布")
+        with solara.ColumnsResponsive(12, medium=6):
+            with solara.Column():
+                if 地圖 is None:
+                    solara.Markdown("目前選擇的時段沒有可繪製座標的站點。")
+                else:
+                    solara.display(地圖)
+                    if 無座標站數:
+                        solara.Markdown(
+                            f"有 {無座標站數} 個站點因缺少座標，未顯示於地圖。"
+                        )
+                solara.Markdown(
+                    "地圖底圖來源：[OpenStreetMap 貢獻者]"
+                    "(https://www.openstreetmap.org/copyright)。"
                 )
-                .rename_axis("可借車數級距")
-                .reset_index(name="站點數")
-            )
-            站點圖 = px.bar(
-                站點級距表,
-                x="可借車數級距",
-                y="站點數",
-                color="可借車數級距",
-                category_orders={
-                    "可借車數級距": 站點級距表["可借車數級距"].tolist()
-                },
-                color_discrete_map=級距顏色,
-                title=f"{行政區.value}・{時段.value}各級距站點數",
-                labels={"可借車數級距": "可借車數", "站點數": "站點數"},
-            )
-            站點圖.update_layout(
-                showlegend=False,
-                xaxis={
-                    "categoryorder": "array",
-                    "categoryarray": 站點級距表["可借車數級距"].tolist(),
-                },
-                margin={"l": 20, "r": 20, "t": 60, "b": 20},
-            )
-            solara.FigurePlotly(站點圖)
+            with solara.Column():
+                站點級距表 = (
+                    站點["可借車級距"]
+                    .value_counts()
+                    .reindex(
+                        級距順序
+                        + (
+                            ["無資料"]
+                            if "無資料" in 站點["可借車級距"].values
+                            else []
+                        ),
+                        fill_value=0,
+                    )
+                    .rename_axis("可借車數級距")
+                    .reset_index(name="站點數")
+                )
+                站點圖 = px.bar(
+                    站點級距表,
+                    x="可借車數級距",
+                    y="站點數",
+                    color="可借車數級距",
+                    category_orders={
+                        "可借車數級距": 站點級距表["可借車數級距"].tolist()
+                    },
+                    color_discrete_map=級距顏色,
+                    title=f"{行政區.value}・{時段.value}各級距站點數",
+                    labels={"可借車數級距": "可借車數", "站點數": "站點數"},
+                )
+                站點圖.update_layout(
+                    showlegend=False,
+                    xaxis={
+                        "categoryorder": "array",
+                        "categoryarray": 站點級距表["可借車數級距"].tolist(),
+                    },
+                    margin={"l": 20, "r": 20, "t": 60, "b": 20},
+                    autosize=True,
+                )
+                solara.FigurePlotly(站點圖)
 
-    各區表 = 各區指定時段摘要(df, 時段.value, 門檻.value)
-    各區顯示表 = 各區表.assign(
-        選定狀態=各區表["sarea"].apply(
-            lambda 名稱: "目前選定行政區" if 名稱 == 行政區.value else "其他行政區"
+        各區表 = 各區指定時段摘要(df, 時段.value, 門檻.value)
+        各區顯示表 = 各區表.assign(
+            選定狀態=各區表["sarea"].apply(
+                lambda 名稱: "目前選定行政區" if 名稱 == 行政區.value else "其他行政區"
+            )
         )
-    )
 
-    圖 = px.bar(
-        各區顯示表,
-        x="空站比例",
-        y="sarea",
-        orientation="h",
-        color="選定狀態",
-        color_discrete_map={
-            "目前選定行政區": "#e76f51",
-            "其他行政區": "#90a4ae",
-        },
-        title=f"{時段.value}各行政區空站比例（可借車 ≤ {門檻.value} 算空站）",
-        labels={"sarea": "行政區", "空站比例": "空站比例"},
-        hover_data=["總站數", "空站數", "可借車總數", "可還車總數"],
-    )
-    圖.update_layout(
-        xaxis_tickformat=".0%",
-        yaxis={"categoryorder": "total ascending"},
-    )
-    表 = 行政區各時段摘要(df, 行政區.value, 門檻.value)
-    行政區顯示表 = 表.assign(
-        選定狀態=表["時段"].apply(
-            lambda 名稱: "目前選定時段" if 名稱 == 時段.value else "其他時段"
+        圖 = px.bar(
+            各區顯示表,
+            x="空站比例",
+            y="sarea",
+            orientation="h",
+            color="選定狀態",
+            color_discrete_map={
+                "目前選定行政區": "#e76f51",
+                "其他行政區": "#90a4ae",
+            },
+            title=f"{時段.value}各行政區空站比例（可借車 ≤ {門檻.value} 算空站）",
+            labels={"sarea": "行政區", "空站比例": "空站比例"},
+            hover_data=["總站數", "空站數", "可借車總數", "可還車總數"],
         )
-    )
+        圖.update_layout(
+            xaxis_tickformat=".0%",
+            yaxis={"categoryorder": "total ascending"},
+            autosize=True,
+        )
+        表 = 行政區各時段摘要(df, 行政區.value, 門檻.value)
+        行政區顯示表 = 表.assign(
+            選定狀態=表["時段"].apply(
+                lambda 名稱: "目前選定時段" if 名稱 == 時段.value else "其他時段"
+            )
+        )
 
-    行政區圖 = px.bar(
-        行政區顯示表,
-        x="空站比例",
-        y="時段",
-        orientation="h",
-        color="選定狀態",
-        color_discrete_map={
-            "目前選定時段": "#e76f51",
-            "其他時段": "#90a4ae",
-        },
-        title=(
-            f"{行政區.value}各時段空站比例"
-            f"（選定時段：{時段.value}，可借車 ≤ {門檻.value} 算空站）"
-        ),
-        labels={"時段": "時段", "空站比例": "空站比例"},
-        hover_data=["總站數", "空站數", "可借車總數", "可還車總數"],
-    )
-    行政區圖.update_layout(
-        xaxis_tickformat=".0%",
-        yaxis={
-            "categoryorder": "array",
-            "categoryarray": list(reversed(表["時段"].tolist())),
-        },
-    )
-    with solara.ColumnsResponsive(12, medium=6):
-        with solara.Column():
-            solara.FigurePlotly(圖)
-            solara.DataFrame(各區顯示表)
-        with solara.Column():
-            solara.Markdown(f"## {行政區.value}各時段摘要")
-            solara.FigurePlotly(行政區圖)
-            solara.DataFrame(行政區顯示表)
+        行政區圖 = px.bar(
+            行政區顯示表,
+            x="空站比例",
+            y="時段",
+            orientation="h",
+            color="選定狀態",
+            color_discrete_map={
+                "目前選定時段": "#e76f51",
+                "其他時段": "#90a4ae",
+            },
+            title=(
+                f"{行政區.value}各時段空站比例"
+                f"（選定時段：{時段.value}，可借車 ≤ {門檻.value} 算空站）"
+            ),
+            labels={"時段": "時段", "空站比例": "空站比例"},
+            hover_data=["總站數", "空站數", "可借車總數", "可還車總數"],
+        )
+        行政區圖.update_layout(
+            xaxis_tickformat=".0%",
+            yaxis={
+                "categoryorder": "array",
+                "categoryarray": list(reversed(表["時段"].tolist())),
+            },
+            autosize=True,
+        )
+        with solara.ColumnsResponsive(12, medium=6):
+            with solara.Column():
+                solara.FigurePlotly(圖)
+                響應式資料呈現(各區顯示表)
+            with solara.Column():
+                solara.Markdown(f"## {行政區.value}各時段摘要")
+                solara.FigurePlotly(行政區圖)
+                響應式資料呈現(行政區顯示表)
 
-    solara.Markdown("### 目前選定時段的營運站點")
-    站點明細 = 站點[["sna", "available_rent_bikes"]].rename(
-        columns={"sna": "站名", "available_rent_bikes": "可借車數"}
-    )
-    站點明細 = 站點明細.sort_values(["可借車數", "站名"])
-    solara.DataFrame(站點明細)
+        solara.Markdown("### 目前選定時段的營運站點")
+        站點明細 = 站點[["sno", "sna", "available_rent_bikes"]].rename(
+            columns={
+                "sno": "站點代碼",
+                "sna": "站名",
+                "available_rent_bikes": "可借車數",
+            }
+        )
+        站點明細 = 站點明細.sort_values(["可借車數", "站名"])
+        響應式資料呈現(站點明細)
 
-    solara.Markdown(f"### {行政區.value}空站站點明細")
-    solara.Markdown(f"以下列出 {時段.value} 可借車數 ≤ {門檻.value} 的營運中站點。")
-    明細 = 行政區空站明細(df, 行政區.value, 時段.value, 門檻.value)
-    if 明細.empty:
-        solara.Markdown("目前門檻下沒有符合條件的空站。")
-    else:
-        solara.DataFrame(明細)
+        solara.Markdown(f"### {行政區.value}空站站點明細")
+        solara.Markdown(
+            f"以下列出 {時段.value} 可借車數 ≤ {門檻.value} 的營運中站點。"
+        )
+        明細 = 行政區空站明細(df, 行政區.value, 時段.value, 門檻.value)
+        if 明細.empty:
+            solara.Markdown("目前門檻下沒有符合條件的空站。")
+        else:
+            響應式資料呈現(明細)
 
-    solara.Markdown(
-        "資料來源：臺北市 YouBike 2.0 即時資料（臺北市資料大平臺），"
-        "依政府資料開放授權條款第 1 版使用。"
-    )
-    快照時間們 = sorted(站點["snapshot_time"].dropna().astype(str).unique())
-    solara.Markdown(
-        f"資料時間（目前選定時段快照）：{'、'.join(快照時間們) or '無資料'}。"
-    )
+        solara.Markdown(
+            "資料來源：臺北市 YouBike 2.0 即時資料（臺北市資料大平臺），"
+            "依政府資料開放授權條款第 1 版使用。"
+        )
+        快照時間們 = sorted(站點["snapshot_time"].dropna().astype(str).unique())
+        solara.Markdown(
+            f"資料時間（目前選定時段快照）：{'、'.join(快照時間們) or '無資料'}。"
+        )
